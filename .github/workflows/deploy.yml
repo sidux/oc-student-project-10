@@ -1,0 +1,164 @@
+name: Deploy to Azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  PULUMI_STACK: ${{ github.event.inputs.environment || 'dev' }}
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install app dependencies
+        run: uv sync --frozen
+
+      - name: Install Pulumi dependencies
+        run: pip install -r infra/requirements.txt
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up Pulumi
+        uses: pulumi/actions@v5
+
+      - name: Pulumi Login (Azure Blob Backend)
+        run: |
+          pulumi login --local
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      - name: Select Pulumi Stack
+        working-directory: infra
+        run: |
+          pulumi stack select ${{ env.PULUMI_STACK }} 2>/dev/null || pulumi stack init ${{ env.PULUMI_STACK }}
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      - name: Pulumi Up
+        working-directory: infra
+        run: pulumi up --stack ${{ env.PULUMI_STACK }} --yes
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get Pulumi Outputs
+        id: pulumi
+        working-directory: infra
+        run: |
+          echo "func_name=$(pulumi stack output function_app_name)" >> $GITHUB_OUTPUT
+          echo "func_url=$(pulumi stack output function_app_url)" >> $GITHUB_OUTPUT
+          echo "storage_account=$(pulumi stack output storage_account_name)" >> $GITHUB_OUTPUT
+          echo "resource_group=$(pulumi stack output resource_group_name)" >> $GITHUB_OUTPUT
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      - name: Upload models to Azure Storage (only if newer)
+        run: |
+          STORAGE_ACCOUNT="${{ steps.pulumi.outputs.storage_account }}"
+          CONTAINER="models"
+          UPLOADED=0
+          SKIPPED=0
+
+          for file in models/*; do
+            [[ -f "$file" ]] || continue
+            [[ "$(basename "$file")" == ".gitkeep" ]] && continue
+
+            blob_name=$(basename "$file")
+            local_mtime=$(stat -c %Y "$file")
+
+            blob_info=$(az storage blob show \
+              --account-name "$STORAGE_ACCOUNT" \
+              --container-name "$CONTAINER" \
+              --name "$blob_name" \
+              --auth-mode login \
+              --query "properties.lastModified" \
+              -o tsv 2>/dev/null) || blob_info=""
+
+            blob_mtime=0
+            if [[ -n "$blob_info" ]]; then
+              blob_mtime=$(date -d "$blob_info" +%s 2>/dev/null || echo "0")
+            fi
+
+            if [[ "$local_mtime" -gt "$blob_mtime" ]]; then
+              echo "Uploading $blob_name (local is newer)"
+              az storage blob upload \
+                --account-name "$STORAGE_ACCOUNT" \
+                --container-name "$CONTAINER" \
+                --name "$blob_name" \
+                --file "$file" \
+                --overwrite \
+                --auth-mode login \
+                --only-show-errors
+              ((UPLOADED++)) || true
+            else
+              echo "Skipping $blob_name (up-to-date)"
+              ((SKIPPED++)) || true
+            fi
+          done
+
+          echo "Models: $UPLOADED uploaded, $SKIPPED skipped"
+
+      - name: Deploy Azure Functions
+        working-directory: app
+        run: |
+          npm install -g azure-functions-core-tools@4 --unsafe-perm true
+          func azure functionapp publish ${{ steps.pulumi.outputs.func_name }} --python
+
+      - name: Health Check
+        run: |
+          echo "Waiting for function app to start..."
+          sleep 30
+          HEALTH_URL="${{ steps.pulumi.outputs.func_url }}/health"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" --max-time 30 || echo "000")
+          if [[ "$HTTP_STATUS" == "200" ]]; then
+            echo "Health check PASSED"
+          else
+            echo "Health check returned HTTP $HTTP_STATUS (may still be starting)"
+          fi
+
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Complete! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Function App** | ${{ steps.pulumi.outputs.func_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | ${{ steps.pulumi.outputs.func_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Storage** | ${{ steps.pulumi.outputs.storage_account }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Endpoints" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "curl ${{ steps.pulumi.outputs.func_url }}/health" >> $GITHUB_STEP_SUMMARY
+          echo "curl '${{ steps.pulumi.outputs.func_url }}/recommendations/123'" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

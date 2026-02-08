@@ -1,0 +1,77 @@
+[project]
+name = "oc-student-project-10"
+version = "0.1.0"
+description = "Recommendation System with Azure Functions"
+readme = "README.md"
+requires-python = ">=3.11, <3.13"
+package-mode = false
+dependencies = [
+    # Core ML dependencies
+    "numpy>=1.26.0,<2.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.5.0",
+    "scipy>=1.14.0",
+    "surprise>=0.1",
+    # Azure Functions
+    "azure-functions>=1.21.0",
+    "azure-storage-blob>=12.23.0",
+    # Embeddings / ML
+    "sentence-transformers>=3.3.0",
+    "torch>=2.5.0",
+    # Utilities
+    "tqdm>=4.67.0",
+    "python-dotenv>=1.0.1",
+    "typing-extensions>=4.14.0",
+    # Infrastructure
+    "pulumi>=3.217.1",
+    "pulumi-azure-native>=2.82.0",
+]
+
+[dependency-groups]
+dev = [
+    # Jupyter / notebooks
+    "jupyter>=1.1.1",
+    "jupyterlab>=4.3.6",
+    "jupyterlab-myst>=2.4.2",
+    "jupytext>=1.16.7",
+    # Data analysis & visualization
+    "matplotlib>=3.10.0",
+    "seaborn>=0.13.2",
+    # Type checking & linting
+    "ruff>=0.8.0",
+    "pyright>=1.1.390",
+    "pandas-stubs>=2.2.0",
+    # Testing
+    "pytest>=8.0.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.27.0",
+    # FastAPI for local dev
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+]
+
+[tool.ruff]
+line-length = 160
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"notebook.py" = ["E402", "E722"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+
+[tool.jupytext]
+formats = "ipynb,py:percent"
+notebook_metadata_filter = "all"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "app"]

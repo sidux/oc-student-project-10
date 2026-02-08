@@ -1,0 +1,44 @@
+### ============================================
+### Azure Functions - Production
+### ============================================
+
+### Health Check
+GET https://oc-student-project-10-func.azurewebsites.net/health
+
+### Recommendations - Hybrid (default)
+GET https://oc-student-project-10-func.azurewebsites.net/recommendations/12345
+
+### Recommendations - Collaborative Filtering
+GET https://oc-student-project-10-func.azurewebsites.net/recommendations/12345?method=collaborative
+
+### Recommendations - Content-Based
+GET https://oc-student-project-10-func.azurewebsites.net/recommendations/12345?method=content
+
+### Recommendations - Popular (fallback)
+GET https://oc-student-project-10-func.azurewebsites.net/recommendations/12345?method=popular
+
+### Recommendations - Custom count
+GET https://oc-student-project-10-func.azurewebsites.net/recommendations/12345?n=10
+
+### ============================================
+### Local Development - Azure Functions
+### ============================================
+
+### Health Check (local)
+GET http://localhost:7071/health
+
+### Recommendations (local)
+GET http://localhost:7071/recommendations/12345
+
+### Recommendations with method (local)
+GET http://localhost:7071/recommendations/12345?method=hybrid&n=5
+
+### ============================================
+### Local Development - Uvicorn
+### ============================================
+
+### Health Check (uvicorn)
+GET http://localhost:8000/health
+
+### Recommendations (uvicorn)
+GET http://localhost:8000/recommendations/12345

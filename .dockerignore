@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Development
+.devenv*
+.direnv
+.venv
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+.jupyter_ystore.db
+
+# Infrastructure
+infra/
+terraform/
+script/
+
+# Documentation
+*.md
+presentation.*
+
+# Azure Functions local files
+local.settings.json
+__azurite_db_*.json
+__blobstorage__/
+__queuestorage__/
+
+# Large data files
+data/
+old/
+
+# macOS
+.DS_Store

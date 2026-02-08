@@ -1,0 +1,16 @@
+# Base Azure Functions
+azure-functions >=1.18.0
+
+# FastAPI and ASGI Server
+fastapi
+uvicorn[standard] # Includes uvloop and httptools for performance
+
+# Azure SDK
+azure-storage-blob[aio] == 12.24.1
+
+pandas == 2.2.3
+scikit-learn == 1.5.2
+surprise == 0.1
+pydantic
+python-dotenv
+numpy>=1.19.5,<2.0
